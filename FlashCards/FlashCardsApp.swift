@@ -10,9 +10,14 @@ import SwiftData
 
 @main
 struct FlashCardsApp: App {
+    @AppStorage("isOnboarding") private var isOnboarding: Bool = true
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Item.self,
+            Deck.self,
+            Card.self,
+            User.self
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -25,7 +30,11 @@ struct FlashCardsApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            if isOnboarding {
+                OnboardingView(isOnboarding: $isOnboarding)
+            } else {
+                AppView()
+            }
         }
         .modelContainer(sharedModelContainer)
     }

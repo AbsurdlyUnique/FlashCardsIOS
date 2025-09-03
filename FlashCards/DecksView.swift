@@ -7,6 +7,8 @@ struct DecksView: View {
     @Query private var decks: [Deck]
     @Query private var users: [User]
     @State private var isShowingAddDeck = false
+    @State private var deckToDelete: Deck?
+    @State private var isConfirmingDelete = false
 
     private var user: User? { users.first }
 
@@ -18,11 +20,11 @@ struct DecksView: View {
                     if let user = user {
                         Text("Hello, \(user.firstName)!")
                             .font(.largeTitle).bold()
-                            .foregroundColor(ColorPalette.blackOlive)
+                            .foregroundStyle(.primary)
                     }
                     Text("Ready to study?")
                         .font(.headline)
-                        .foregroundColor(ColorPalette.timberwolf)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal)
 
@@ -30,17 +32,26 @@ struct DecksView: View {
                     EmptyStateView(isShowingAddDeck: $isShowingAddDeck)
                 } else {
                     ScrollView {
-                        ForEach(decks) { deck in
-                            NavigationLink(destination: DeckDetailView(deck: deck)) {
-                                DeckCard(deck: deck)
+                        VStack(spacing: 12) {
+                            ForEach(decks) { deck in
+                                NavigationLink(destination: DeckDetailView(deck: deck)) {
+                                    DeckCard(deck: deck)
+                                }
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        deckToDelete = deck
+                                        isConfirmingDelete = true
+                                    } label: {
+                                        Label("Delete Deck", systemImage: "trash")
+                                    }
+                                }
                             }
                         }
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color.white)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: { isShowingAddDeck = true }) {
@@ -49,13 +60,37 @@ struct DecksView: View {
                     }
                 }
             }
-            .fullScreenCover(isPresented: $isShowingAddDeck) {
-                AddDeckView()
+            .sheet(isPresented: $isShowingAddDeck) { AddDeckView() }
+            .confirmationDialog(
+                "Delete deck?",
+                isPresented: $isConfirmingDelete,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    if let deck = deckToDelete { deleteDeck(deck) }
+                }
+                Button("Cancel", role: .cancel) { deckToDelete = nil }
+            } message: {
+                Text(deckToDelete != nil ? "This will remove \(deckToDelete!.title) and its cards." : "")
             }
+        }
+    }
+
+    private func deleteDeck(_ deck: Deck) {
+        withAnimation {
+            // Delete child cards first to avoid relationship inconsistencies
+            for card in deck.cards {
+                modelContext.delete(card)
+            }
+            modelContext.delete(deck)
+            // Reset dialog state
+            deckToDelete = nil
+            isConfirmingDelete = false
         }
     }
 }
 
+@available(iOS 17.0, *)
 struct EmptyStateView: View {
     @Binding var isShowingAddDeck: Bool
 
@@ -64,14 +99,15 @@ struct EmptyStateView: View {
             Spacer()
             Image(systemName: "rectangle.stack.fill")
                 .font(.system(size: 80))
-                .foregroundColor(ColorPalette.timberwolf.opacity(0.3))
+                .foregroundStyle(ColorPalette.flame)
+                .opacity(0.85)
             Text("Your First Deck")
                 .font(.title).bold()
-                .foregroundColor(ColorPalette.blackOlive)
+                .foregroundStyle(.primary)
             Text("Tap the '+' button to create your first flashcard deck and start your learning journey.")
                 .font(.headline)
                 .multilineTextAlignment(.center)
-                .foregroundColor(ColorPalette.timberwolf)
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 40)
             Spacer()
             Spacer()
@@ -87,7 +123,7 @@ struct DeckCard: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(deck.title)
                 .font(.title2).bold()
-                .foregroundColor(ColorPalette.blackOlive)
+                .foregroundStyle(.primary)
                 .lineLimit(2)
 
             Spacer()
@@ -95,19 +131,20 @@ struct DeckCard: View {
             HStack {
                 Text("\(deck.cards.count) cards")
                     .font(.headline)
-                    .foregroundColor(ColorPalette.timberwolf)
+                    .foregroundStyle(.secondary)
                 Spacer()
                 Image(systemName: "chevron.right")
-                    .foregroundColor(ColorPalette.timberwolf.opacity(0.8))
+                    .foregroundStyle(.secondary)
+                    .opacity(0.8)
             }
         }
         .padding()
         .frame(maxWidth: .infinity, minHeight: 120)
-        .background(ColorPalette.floralWhite)
+        .background(Color.secondary.opacity(0.08))
         .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(ColorPalette.timberwolf.opacity(0.2), lineWidth: 1)
+                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
         )
     }
 }

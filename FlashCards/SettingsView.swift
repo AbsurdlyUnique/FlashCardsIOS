@@ -4,24 +4,14 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("theme") private var theme = "light"
     @AppStorage("notifications") private var notificationsEnabled = true
+    @Environment(\.openURL) private var openURL
+    
+    // TODO: Replace with your real App Store ID, e.g., "1234567890"
+    private let appStoreID = "YOUR_APP_STORE_ID"
     
     var body: some View {
         NavigationStack {
             List {
-                // Appearance
-                Section {
-                    Picker("Theme", selection: $theme) {
-                        Text("Light").tag("light")
-                        Text("Dark").tag("dark")
-                    }
-                    .tint(ColorPalette.flame)
-                    
-                    Toggle("Dynamic Type", isOn: .constant(true))
-                        .tint(ColorPalette.flame)
-                } header: {
-                    Text("Appearance")
-                }
-                
                 // Study Settings
                 Section {
                     Toggle("Notifications", isOn: $notificationsEnabled)
@@ -53,6 +43,17 @@ struct SettingsView: View {
                     Text("Data & Privacy")
                 }
                 
+                // Account
+                Section {
+                    NavigationLink {
+                        AccountView()
+                    } label: {
+                        Label("Account", systemImage: "person.crop.circle")
+                    }
+                } header: {
+                    Text("Account")
+                }
+                
                 // About
                 Section {
                     HStack {
@@ -61,8 +62,15 @@ struct SettingsView: View {
                         Text("1.0")
                     }
                     
-                    NavigationLink {
-                        Text("Rate in App Store")
+                    Button {
+                        // Open App Store product page directly
+                        let appStoreURL = URL(string: "itms-apps://itunes.apple.com/app/id\(appStoreID)")
+                        if let url = appStoreURL {
+                            openURL(url)
+                        } else if let httpsURL = URL(string: "https://apps.apple.com/app/id\(appStoreID)") {
+                            // Fallback to HTTPS if needed
+                            openURL(httpsURL)
+                        }
                     } label: {
                         Label("Rate in App Store", systemImage: "star.fill")
                     }
@@ -78,3 +86,4 @@ struct SettingsView: View {
 #Preview {
     SettingsView()
 }
+

@@ -6,11 +6,10 @@ struct OnboardingView: View {
     @Binding var isOnboarding: Bool
     @State private var currentTab = 0
     @State private var firstName: String = ""
+    @FocusState private var isNameFocused: Bool
 
     var body: some View {
         ZStack {
-            Color.white.edgesIgnoringSafeArea(.all)
-
             VStack {
                 TabView(selection: $currentTab) {
                     OnboardingPageView(
@@ -31,30 +30,44 @@ struct OnboardingView: View {
                             .foregroundColor(ColorPalette.flame)
                         Text("Make It Yours")
                             .font(.largeTitle).bold()
-                            .foregroundColor(ColorPalette.blackOlive)
+                            .foregroundStyle(.primary)
                         Text("A personal touch makes all the difference. What should we call you?")
                             .font(.headline)
                             .multilineTextAlignment(.center)
-                            .foregroundColor(ColorPalette.blackOlive.opacity(0.8))
+                            .foregroundStyle(.secondary)
                             .padding(.horizontal, 40)
                         
-                        TextField("Enter your first name", text: $firstName)
-                            .padding()
-                            .background(ColorPalette.floralWhite)
-                            .cornerRadius(10)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(ColorPalette.timberwolf, lineWidth: 1)
-                            )
-                            .padding(.horizontal, 40)
+                        HStack(spacing: 8) {
+                            Image(systemName: "person")
+                                .foregroundStyle(.secondary)
+                            TextField("Enter your first name", text: $firstName)
+                                .textInputAutocapitalization(.words)
+                                .autocorrectionDisabled(true)
+                                .submitLabel(.done)
+                                .focused($isNameFocused)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .frame(minHeight: 56)
+                        .background(Color.secondary.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                        )
+                        .cornerRadius(12)
+                        .contentShape(Rectangle())
+                        .onTapGesture { isNameFocused = true }
+                        .padding(.horizontal, 40)
+                        
                     }.tag(2)
                 }
-                .tabViewStyle(PageTabViewStyle())
+                .tabViewStyle(.page)
+                .indexViewStyle(.page(backgroundDisplayMode: .never))
 
                 HStack {
                     ForEach(0..<3) { index in
                         Capsule()
-                            .fill(currentTab == index ? ColorPalette.flame : ColorPalette.timberwolf.opacity(0.5))
+                            .fill(currentTab == index ? ColorPalette.flame : Color.secondary.opacity(0.5))
                             .frame(width: currentTab == index ? 20 : 8, height: 8)
                             .animation(.spring(), value: currentTab)
                     }
@@ -107,12 +120,12 @@ struct OnboardingPageView: View {
             
             Text(title)
                 .font(.largeTitle).bold()
-                .foregroundColor(ColorPalette.blackOlive)
+                .foregroundStyle(.primary)
             
             Text(description)
                 .font(.headline)
                 .multilineTextAlignment(.center)
-                .foregroundColor(ColorPalette.blackOlive.opacity(0.8))
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 40)
         }
     }

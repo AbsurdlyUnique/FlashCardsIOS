@@ -1,7 +1,6 @@
 import SwiftUI
 import SwiftData
 
-@available(iOS 17.0, *)
 struct DeckDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State var deck: Deck
@@ -14,16 +13,20 @@ struct DeckDetailView: View {
                 CardEmptyStateView(isShowingAddCard: $isShowingAddCard)
             } else {
                 VStack {
-                    Button(action: { isShowingStudyView = true }) {
+                    Button(action: {
+                        print("[DeckDetailView] Study Deck tapped for deck: \(deck.title)")
+                        isShowingStudyView = true
+                    }) {
                         Label("Study Deck", systemImage: "book.fill")
                             .font(.headline)
-                            .padding()
                             .frame(maxWidth: .infinity)
-                            .foregroundColor(.white)
-                            .background(ColorPalette.flame)
-                            .cornerRadius(12)
+                            .padding(.vertical, 14)
                     }
-                    .padding([.horizontal, .top])
+                    .buttonStyle(.borderedProminent)
+                    .tint(ColorPalette.flame)
+                    .controlSize(.large)
+                    .buttonBorderShape(.roundedRectangle(radius: 14))
+                    .padding([.horizontal, .top], 14)
                     .disabled(deck.cards.isEmpty)
                     
                     List {
@@ -43,11 +46,17 @@ struct DeckDetailView: View {
                 }
             }
         }
-        .fullScreenCover(isPresented: $isShowingAddCard) {
-            AddCardView(deck: deck)
+        .sheet(isPresented: $isShowingAddCard) {
+            AddCardView(deck: deck, onClose: { isShowingAddCard = false })
         }
         .fullScreenCover(isPresented: $isShowingStudyView) {
-            StudyView(deck: deck)
+            StudyView(deck: deck, onClose: {
+                print("[DeckDetailView] onClose from StudyView received; dismissing cover")
+                isShowingStudyView = false
+            })
+        }
+        .onChange(of: isShowingStudyView) { newValue in
+            print("[DeckDetailView] isShowingStudyView changed: \(newValue)")
         }
     }
 
@@ -67,27 +76,28 @@ private struct CardEmptyStateView: View {
         VStack(spacing: 20) {
             Image(systemName: "square.stack.3d.up.slash.fill")
                 .font(.system(size: 60))
-                .foregroundColor(ColorPalette.timberwolf.opacity(0.4))
+                .foregroundStyle(ColorPalette.flame)
             Text("No Cards Yet")
                 .font(.title).bold()
-                .foregroundColor(ColorPalette.blackOlive)
+                .foregroundStyle(.primary)
             Text("Tap the '+' button to add your first card to this deck.")
                 .font(.headline)
                 .multilineTextAlignment(.center)
-                .foregroundColor(ColorPalette.timberwolf)
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 40)
             Button(action: { isShowingAddCard = true }) {
                 Label("Add First Card", systemImage: "plus")
                     .font(.headline)
-                    .padding()
-                    .foregroundColor(.white)
-                    .background(ColorPalette.flame)
-                    .cornerRadius(12)
+                    .padding(.vertical, 14)
             }
+            .buttonStyle(.borderedProminent)
+            .tint(ColorPalette.flame)
+            .controlSize(.large)
+            .buttonBorderShape(.roundedRectangle(radius: 14))
             .padding(.top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.white)
+        .background(.background)
     }
 }
 
@@ -98,15 +108,15 @@ private struct CardRow: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(card.question)
                 .font(.headline)
-                .foregroundColor(ColorPalette.blackOlive)
+                .foregroundStyle(.primary)
             Text(card.answer)
                 .font(.subheadline)
-                .foregroundColor(ColorPalette.timberwolf)
+                .foregroundStyle(.secondary)
             if let hint = card.hint, !hint.isEmpty {
                 Text("Hint: \(hint)")
                     .font(.footnote)
                     .italic()
-                    .foregroundColor(ColorPalette.timberwolf.opacity(0.8))
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.vertical, 4)

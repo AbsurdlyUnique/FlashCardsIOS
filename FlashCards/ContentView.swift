@@ -8,6 +8,7 @@
 import SwiftUI
 import SwiftData
 
+#if DEBUG
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var items: [Item]
@@ -114,7 +115,4 @@ struct DetailView: View {
         .modelContainer(for: Item.self, inMemory: true)
 }
 
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
-}
+#endif

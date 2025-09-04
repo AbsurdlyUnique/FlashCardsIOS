@@ -35,6 +35,12 @@ public final class Card {
     public var reviewCount: Int
     public var interval: Double
     public var easeFactor: Double
+    public var lapses: Int
+    public var difficulty: Double
+    public var stability: Double
+    public var suspended: Bool
+    public var buriedUntil: Date?
+    public var lastGradeRaw: Int?
     public var createdAt: Date
     public var updatedAt: Date
     
@@ -48,6 +54,12 @@ public final class Card {
         self.reviewCount = 0
         self.interval = 1.0
         self.easeFactor = 2.5
+        self.lapses = 0
+        self.difficulty = 0.3
+        self.stability = 0.0
+        self.suspended = false
+        self.buriedUntil = nil
+        self.lastGradeRaw = nil
         self.createdAt = Date()
         self.updatedAt = Date()
     }

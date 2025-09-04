@@ -1,10 +1,11 @@
 import SwiftUI
 import SwiftData
 
+@available(iOS 17.0, *)
 struct StudyView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \Deck.title) private var allDecks: [Deck]
+    @Query private var allDecks: [Deck]
 
     @State var deck: Deck?
     var onClose: (() -> Void)? = nil
@@ -13,6 +14,7 @@ struct StudyView: View {
     @State private var isFlipped = false
     @State private var showHint = false
     @State private var showDeckPicker = false
+    private let engine = MasteryEngine()
 
     init(deck: Deck? = nil, onClose: (() -> Void)? = nil) {
         _deck = State(initialValue: deck)
@@ -35,7 +37,7 @@ struct StudyView: View {
                 VStack {
                     if let card = currentCard {
                         ProgressView(value: progress)
-                            .progressViewStyle(LinearProgressViewStyle(tint: .accentColor))
+                            .progressViewStyle(LinearProgressViewStyle(tint: ColorPalette.flame))
                             .padding(.vertical)
 
                         Spacer()
@@ -57,7 +59,7 @@ struct StudyView: View {
                                 Label("Show Hint", systemImage: "lightbulb.fill")
                             }
                             .padding(.top)
-                            .foregroundColor(.accentColor)
+                            .foregroundColor(ColorPalette.flame)
 
                             if showHint {
                                 Text(hint)
@@ -112,9 +114,17 @@ struct StudyView: View {
                 .onAppear {
                     print("[StudyView] onAppear. deck title=\(deck?.title ?? "nil")")
                     if let currentDeck = deck {
-                        let dueCards = currentDeck.cards.filter { $0.nextReview == nil || ($0.nextReview ?? .distantPast) <= Date() }
+                        let now = Date()
+                        let dueCards = currentDeck.cards.filter { card in
+                            let state = SRSMapper.state(from: card)
+                            return engine.isDue(state, at: now)
+                        }
                         cardsToStudy = (dueCards.isEmpty ? currentDeck.cards : dueCards).shuffled()
                         print("[StudyView] Loaded \(cardsToStudy.count) cards to study")
+                    } else if allDecks.isEmpty {
+                        // No decks exist, route user to Decks tab via AppView onClose callback
+                        print("[StudyView] No decks exist; dismissing to Decks tab")
+                        forceDismiss(reason: "no_decks")
                     }
                 }
                 .onDisappear { print("[StudyView] onDisappear") }
@@ -123,7 +133,7 @@ struct StudyView: View {
                 VStack(spacing: 24) {
                     ZStack {
                         Circle()
-                            .fill(LinearGradient(colors: [Color.accentColor.opacity(0.25), Color.accentColor.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .fill(LinearGradient(colors: [ColorPalette.flame.opacity(0.25), ColorPalette.flame.opacity(0.10)], startPoint: .topLeading, endPoint: .bottomTrailing))
                             .frame(width: 140, height: 140)
                         Image(systemName: "book.closed.fill")
                             .font(.system(size: 54, weight: .semibold))
@@ -144,7 +154,12 @@ struct StudyView: View {
                     .padding(.horizontal, 24)
 
                     Button {
-                        showDeckPicker = true
+                        if allDecks.isEmpty {
+                            // Route to Decks tab
+                            forceDismiss(reason: "empty_decks_create")
+                        } else {
+                            showDeckPicker = true
+                        }
                     } label: {
                         HStack {
                             Image(systemName: "rectangle.stack")
@@ -156,14 +171,27 @@ struct StudyView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.accentColor)
+                    .tint(ColorPalette.flame)
                     .padding(.horizontal, 32)
 
                     if allDecks.isEmpty {
-                        Text("No decks yet. Create one in the Decks tab to begin.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 4)
+                        VStack(spacing: 10) {
+                            Text("No decks yet. Create one in the Decks tab to begin.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                            Button {
+                                forceDismiss(reason: "cta_create_deck")
+                            } label: {
+                                Text("Create a Deck")
+                                    .fontWeight(.semibold)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(ColorPalette.flame)
+                            .padding(.horizontal, 32)
+                        }
+                        .padding(.top, 4)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -229,34 +257,11 @@ struct StudyView: View {
             return
         }
         let now = Date()
-        let quality = correct ? 5 : 2 // Simplified quality score
-        let minEase: Double = 1.3
-
-        // Update ease factor (SM-2 formula)
-        var ef = card.easeFactor
-        ef = ef + (0.1 - (5.0 - Double(quality)) * (0.08 + (5.0 - Double(quality)) * 0.02))
-        card.easeFactor = max(minEase, ef)
-
-        if correct {
-            card.reviewCount += 1
-            if card.reviewCount == 1 {
-                card.interval = 1
-            } else if card.reviewCount == 2 {
-                card.interval = 6
-            } else {
-                card.interval = (card.interval * card.easeFactor).rounded()
-            }
-        } else {
-            // Reset on incorrect answer
-            card.reviewCount = 0
-            card.interval = 1
-        }
-
-        card.lastReviewed = now
-        card.nextReview = Calendar.current.date(byAdding: .day, value: Int(card.interval), to: now)
-        card.updatedAt = now
-
-        // SwiftData will track these changes automatically
+        let grade: CardGrade = correct ? .good : .again
+        let state = SRSMapper.state(from: card)
+        let next = engine.nextState(from: state, grade: grade, now: now)
+        SRSMapper.apply(next, to: card)
+        print("[StudyView] Graded card id=\(card.id) grade=\(grade.rawValue) -> intervalDays=\(next.intervalDays), ease=\(next.ease), stability=\(next.stability), nextReview=\(next.nextReview?.description ?? "nil")")
         goToNextCard()
     }
 
@@ -297,7 +302,7 @@ struct StudyCompletionView: View {
                     .font(.headline)
                     .padding()
                     .foregroundColor(.white)
-                    .background(Color.accentColor)
+                    .background(ColorPalette.flame)
                     .cornerRadius(12)
             }
             .padding(.top)

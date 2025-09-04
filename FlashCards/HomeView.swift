@@ -1,6 +1,10 @@
 import SwiftUI
+import SwiftData
 
+@available(iOS 17.0, *)
 struct HomeView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query private var decks: [Deck]
     @State private var isShowingStudy = false
 
     var body: some View {
@@ -15,27 +19,57 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
 
-                // Featured Decks
-                SectionHeader(title: "Featured Decks", icon: "star.fill")
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(0..<6) { index in
-                            FeaturedDeckCard(
-                                title: "Deck \(index + 1)",
-                                cardsCount: Int.random(in: 20...120),
-                                progress: Double(index % 4) / 4
-                            )
-                            .frame(width: 260)
-                        }
+                // Featured Decks (Data-driven)
+                SectionHeader(title: "Your Decks", icon: "rectangle.stack.fill")
+                if decks.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("No Decks Yet")
+                            .font(.headline)
+                        Text("Create a deck in the Decks tab to get started.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 16) {
+                            ForEach(decks) { deck in
+                                let total = deck.cards.count
+                                let reviewed = deck.cards.filter { $0.lastReviewed != nil }.count
+                                let progress = total == 0 ? 0.0 : Double(reviewed) / Double(total)
+                                FeaturedDeckCard(
+                                    title: deck.title,
+                                    cardsCount: total,
+                                    progress: progress
+                                )
+                                .frame(width: 260)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
                 }
 
-                // Quick Stats
+                // Quick Stats (Data-driven)
                 SectionHeader(title: "Quick Stats", icon: "gauge.with.dots.needle.67percent")
+                let today = Calendar.current.startOfDay(for: Date())
+                let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: today)!
+                let allCards = decks.flatMap { $0.cards }
+                let dueToday = allCards.filter { card in
+                    if let due = card.nextReview { return due >= today && due < tomorrow }
+                    // cards without a schedule are considered due now
+                    return true
+                }.count
+                let totalCards = allCards.count
+                let lapses = allCards.reduce(0) { $0 + $1.lapses }
+                let avgEase = allCards.isEmpty ? 0.0 : allCards.map { $0.easeFactor }.reduce(0, +) / Double(allCards.count)
 
-                AdaptiveStatsGrid()
+                AdaptiveStatsGrid(items: [
+                    ("\(dueToday)", "Due Today", "calendar.badge.clock"),
+                    ("\(totalCards)", "Total Cards", "square.stack.3d.up.fill"),
+                    ("\(lapses)", "Lapses", "arrow.uturn.backward.circle.fill"),
+                    (String(format: "%.2f", avgEase), "Avg Ease", "speedometer")
+                ])
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
@@ -160,12 +194,7 @@ struct StatCard: View {
 }
 
 struct AdaptiveStatsGrid: View {
-    let items: [(String, String, String)] = [
-        ("10", "Cards Today", "list.bullet.rectangle.fill"),
-        ("5", "Streak", "flame.fill"),
-        ("75%", "Accuracy", "checkmark.circle.fill"),
-        ("120", "Total Cards", "square.stack.3d.up.fill")
-    ]
+    let items: [(String, String, String)]
     var body: some View {
         let columns = [GridItem(.adaptive(minimum: 160), spacing: 16)]
         LazyVGrid(columns: columns, spacing: 16) {
@@ -191,6 +220,9 @@ struct SectionHeader: View {
     }
 }
 
+#if DEBUG
+@available(iOS 17.0, *)
 #Preview {
     HomeView()
 }
+#endif

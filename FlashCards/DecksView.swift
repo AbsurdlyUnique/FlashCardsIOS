@@ -149,6 +149,7 @@ struct DeckCard: View {
     }
 }
 
+#if DEBUG
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: Deck.self, User.self, configurations: config)
@@ -162,3 +163,4 @@ struct DeckCard: View {
     return DecksView()
         .modelContainer(container)
 }
+#endif

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 
+@available(iOS 17.0, *)
 struct OnboardingView: View {
     @Environment(\.modelContext) private var modelContext
     @Binding var isOnboarding: Bool

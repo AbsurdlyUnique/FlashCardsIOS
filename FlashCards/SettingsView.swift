@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("theme") private var theme = "light"
     @AppStorage("notifications") private var notificationsEnabled = true
+    @AppStorage("cloudSyncEnabled") private var cloudSyncEnabled = false
     @Environment(\.openURL) private var openURL
     
     // TODO: Replace with your real App Store ID, e.g., "1234567890"
@@ -12,6 +13,17 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                // Cloud
+                Section {
+                    Toggle("iCloud Sync (Optional)", isOn: $cloudSyncEnabled)
+                        .tint(ColorPalette.flame)
+                    Text("When enabled, your decks and study data may sync via your Apple ID using iCloud across your Apple devices.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Cloud")
+                }
+
                 // Study Settings
                 Section {
                     Toggle("Notifications", isOn: $notificationsEnabled)
@@ -35,7 +47,7 @@ struct SettingsView: View {
                     }
                     
                     NavigationLink {
-                        Text("Privacy Policy")
+                        PrivacyPolicyView()
                     } label: {
                         Label("Privacy Policy", systemImage: "lock.fill")
                     }
@@ -83,7 +95,9 @@ struct SettingsView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     SettingsView()
 }
+#endif
 

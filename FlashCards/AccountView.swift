@@ -67,7 +67,7 @@ struct AccountView: View {
         do {
             try deleteAll(of: Card.self)
             try deleteAll(of: Deck.self)
-            try deleteAll(of: Item.self)
+            // Removed deletion of debug-only Item model to avoid type ambiguity
             try deleteAll(of: User.self)
             try context.save()
             // Reset local preferences
@@ -89,6 +89,8 @@ struct AccountView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     NavigationStack { AccountView() }
 }
+#endif

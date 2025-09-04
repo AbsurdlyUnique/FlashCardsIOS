@@ -54,9 +54,12 @@ struct AppView: View {
     }
 }
 
+#if DEBUG
+@available(iOS 17.0, *)
 #Preview {
     AppView()
 }
+#endif
 
 // MARK: - Study Tab Container that always presents StudyView full-screen
 private struct StudyTabContainer: View {

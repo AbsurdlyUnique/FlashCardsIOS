@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 
+@available(iOS 17.0, *)
 struct DeckDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @State var deck: Deck
@@ -69,6 +70,7 @@ struct DeckDetailView: View {
     }
 }
 
+@available(iOS 17.0, *)
 private struct CardEmptyStateView: View {
     @Binding var isShowingAddCard: Bool
 
@@ -101,6 +103,7 @@ private struct CardEmptyStateView: View {
     }
 }
 
+@available(iOS 17.0, *)
 private struct CardRow: View {
     let card: Card
 
@@ -118,11 +121,70 @@ private struct CardRow: View {
                     .italic()
                     .foregroundStyle(.secondary)
             }
+
+            // Inline stats rows
+            VStack(alignment: .leading, spacing: 6) {
+                statRow(icon: "calendar.badge.clock", title: "Due", value: nextReviewText(card))
+                statRow(icon: "clock", title: "Interval", value: intervalText(card))
+                statRow(icon: "arrow.uturn.backward", title: "Lapses", value: "\(card.lapses)")
+                statRow(icon: "speedometer", title: "Ease", value: String(format: "%.2fx", card.easeFactor))
+                statRow(icon: "shield", title: "Stability", value: String(format: "%.2f", card.stability))
+                statRow(icon: "brain.head.profile", title: "Difficulty", value: String(format: "%.2f", card.difficulty))
+                if let last = card.lastReviewed {
+                    statRow(icon: "calendar", title: "Last", value: relativeText(from: last))
+                }
+            }
         }
         .padding(.vertical, 4)
     }
+
+    // MARK: - Helpers
+    private var dateFormatter: DateFormatter {
+        let df = DateFormatter()
+        df.dateStyle = .medium
+        df.timeStyle = .none
+        return df
+    }
+
+    private var relativeFormatter: RelativeDateTimeFormatter {
+        let rf = RelativeDateTimeFormatter()
+        rf.unitsStyle = .full
+        return rf
+    }
+
+    private func nextReviewText(_ card: Card) -> String {
+        guard let due = card.nextReview else { return "today" }
+        if Calendar.current.isDateInToday(due) { return "today" }
+        if Calendar.current.isDateInTomorrow(due) { return "tomorrow" }
+        // Relative for future/past
+        return relativeText(from: due)
+    }
+
+    private func intervalText(_ card: Card) -> String {
+        let days = card.interval
+        if days <= 0 { return "—" }
+        return days == 1 ? "1 day" : "\(Int(days)) days"
+    }
+
+    @ViewBuilder
+    private func statRow(icon: String, title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: icon)
+                .foregroundStyle(ColorPalette.flame)
+            Text("\(title):")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.footnote)
+        }
+    }
+
+    private func relativeText(from date: Date) -> String {
+        return relativeFormatter.localizedString(for: date, relativeTo: Date())
+    }
 }
 
+#if DEBUG
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: Deck.self, configurations: config)
@@ -137,3 +199,4 @@ private struct CardRow: View {
             .modelContainer(container)
     }
 }
+#endif

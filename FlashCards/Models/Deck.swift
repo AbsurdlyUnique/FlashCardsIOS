@@ -43,6 +43,11 @@ public final class Card {
     public var lastGradeRaw: Int?
     public var createdAt: Date
     public var updatedAt: Date
+    // Response-time tracking for adaptive grading (optional for migration safety)
+    public var totalResponseTime: Double?
+    public var responseCount: Int?
+    public var responseTimeEMA: Double?
+    public var lastResponseTime: Double?
     
     public init(question: String, answer: String, hint: String? = nil) {
         self.id = UUID()
@@ -62,5 +67,9 @@ public final class Card {
         self.lastGradeRaw = nil
         self.createdAt = Date()
         self.updatedAt = Date()
+        self.totalResponseTime = nil
+        self.responseCount = nil
+        self.responseTimeEMA = nil
+        self.lastResponseTime = nil
     }
 }

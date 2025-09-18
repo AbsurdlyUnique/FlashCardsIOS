@@ -6,6 +6,7 @@ struct StudyView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query private var allDecks: [Deck]
+    @Query private var users: [User]
 
     @State var deck: Deck?
     var onClose: (() -> Void)? = nil
@@ -15,6 +16,14 @@ struct StudyView: View {
     @State private var showHint = false
     @State private var showDeckPicker = false
     private let engine = MasteryEngine()
+    // Track how long the learner takes to answer
+    @State private var answerStartAt: Date? = nil
+    // Session-level RT smoothing and timeout handling
+    @State private var sessionRtEMA: Double = 0.0
+    @State private var answerTimer: Timer? = nil
+    @AppStorage("timeoutSeconds") private var timeoutSeconds: Double = 30.0
+    @State private var hintUsed: Bool = false
+    @State private var showEndSessionDialog: Bool = false
 
     init(deck: Deck? = nil, onClose: (() -> Void)? = nil) {
         _deck = State(initialValue: deck)
@@ -45,8 +54,14 @@ struct StudyView: View {
                         FlashcardView(card: card, isFlipped: $isFlipped)
                             .onTapGesture {
                                 withAnimation(.spring()) {
+                                    let wasFlipped = isFlipped
                                     isFlipped.toggle()
                                     showHint = false
+                                    if !wasFlipped && isFlipped {
+                                        // Start timing when the answer side is revealed
+                                        answerStartAt = Date()
+                                        startAnswerTimer()
+                                    }
                                     print("[StudyView] Tapped card. isFlipped=\(isFlipped)")
                                 }
                             }
@@ -54,6 +69,7 @@ struct StudyView: View {
                         if let hint = card.hint, !hint.isEmpty, !isFlipped {
                             Button(action: {
                                 showHint.toggle()
+                                if showHint { hintUsed = true }
                                 print("[StudyView] Toggled hint. showHint=\(showHint)")
                             }) {
                                 Label("Show Hint", systemImage: "lightbulb.fill")
@@ -121,6 +137,7 @@ struct StudyView: View {
                         }
                         cardsToStudy = (dueCards.isEmpty ? currentDeck.cards : dueCards).shuffled()
                         print("[StudyView] Loaded \(cardsToStudy.count) cards to study")
+                        // Do not start timing yet; start when the card is flipped to see the answer
                     } else if allDecks.isEmpty {
                         // No decks exist, route user to Decks tab via AppView onClose callback
                         print("[StudyView] No decks exist; dismissing to Decks tab")
@@ -243,10 +260,33 @@ struct StudyView: View {
         .toolbar(.hidden, for: .tabBar)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: { forceDismiss(reason: "toolbar_close") }) {
+                Button(action: {
+                    // If there are remaining cards, ask how to end session
+                    if currentCard != nil {
+                        showEndSessionDialog = true
+                    } else {
+                        forceDismiss(reason: "toolbar_close_no_remaining")
+                    }
+                }) {
                     Image(systemName: "xmark")
                 }
             }
+        }
+        .confirmationDialog(
+            "End Session?",
+            isPresented: $showEndSessionDialog,
+            titleVisibility: .visible
+        ) {
+            Button("End & Postpone Remaining to Tomorrow") {
+                postponeRemainingToTomorrow()
+                forceDismiss(reason: "end_session_postpone_remaining")
+            }
+            Button("End Session Now") {
+                forceDismiss(reason: "end_session_now")
+            }
+            Button("Cancel", role: .cancel) { showEndSessionDialog = false }
+        } message: {
+            Text("You have more cards left in this session. You can end now, or postpone the remaining cards until tomorrow.")
         }
         
     }
@@ -257,11 +297,25 @@ struct StudyView: View {
             return
         }
         let now = Date()
-        let grade: CardGrade = correct ? .good : .again
+        // Compute elapsed response time
+        let elapsed = max(0, now.timeIntervalSince(answerStartAt ?? now))
+        // Update response-time stats before mapping the grade so thresholds adapt
+        updateResponseStats(for: card, elapsed: elapsed)
+        let grade = gradeFor(correct: correct, elapsed: elapsed, card: card, hintUsed: hintUsed)
         let state = SRSMapper.state(from: card)
-        let next = engine.nextState(from: state, grade: grade, now: now)
+        // Compute adaptive baseline (same as in grade mapping)
+        let bootstrap: TimeInterval = 5.0
+        let rc = card.responseCount ?? 0
+        let ema = card.responseTimeEMA ?? 0
+        let cardBaseline = (rc > 3 && ema > 0) ? ema : bootstrap
+        let sessionBaseline = sessionRtEMA > 0 ? sessionRtEMA : bootstrap
+        let baseline = max(1.0, 0.5 * cardBaseline + 0.5 * sessionBaseline)
+        // Observed retrievability estimate from response time
+        let rHat = max(0.001, min(0.999, exp(-elapsed / baseline)))
+        let next = engine.nextState(from: state, grade: grade, now: now, observedRetrievability: rHat)
         SRSMapper.apply(next, to: card)
-        print("[StudyView] Graded card id=\(card.id) grade=\(grade.rawValue) -> intervalDays=\(next.intervalDays), ease=\(next.ease), stability=\(next.stability), nextReview=\(next.nextReview?.description ?? "nil")")
+        print("[StudyView] Graded card id=\(card.id) correct=\(correct) elapsed=\(String(format: "%.2fs", elapsed)) mappedGrade=\(grade) -> intervalDays=\(next.intervalDays), ease=\(next.ease), stability=\(next.stability), nextReview=\(next.nextReview?.description ?? "nil")")
+        stopAnswerTimer()
         goToNextCard()
     }
 
@@ -270,8 +324,105 @@ struct StudyView: View {
             currentCardIndex += 1
             isFlipped = false
             showHint = false
+            hintUsed = false
             print("[StudyView] Advanced to next card. index=\(currentCardIndex)")
+            answerStartAt = nil
+            stopAnswerTimer()
         }
+    }
+
+    // Postpone all remaining cards until tomorrow (bury)
+    private func postponeRemainingToTomorrow() {
+        guard currentCardIndex < cardsToStudy.count else { return }
+        let calendar = Calendar.current
+        let tomorrow = calendar.startOfDay(for: Date()).addingTimeInterval(86400)
+        for idx in currentCardIndex..<cardsToStudy.count {
+            let card = cardsToStudy[idx]
+            card.buriedUntil = tomorrow
+            card.updatedAt = Date()
+        }
+        print("[StudyView] Postponed \(cardsToStudy.count - currentCardIndex) remaining cards to tomorrow")
+    }
+
+    // Map binary + response time to a CardGrade using adaptive thresholds per card
+    private func gradeFor(correct: Bool, elapsed: TimeInterval, card: Card, hintUsed: Bool) -> CardGrade {
+        guard correct else { return .again }
+        // Establish a baseline using EMA or a bootstrap default
+        let bootstrap: TimeInterval = 5.0 // seconds, initial expected recall time
+        let rc = card.responseCount ?? 0
+        let ema = card.responseTimeEMA ?? 0
+        let cardBaseline = (rc > 3 && ema > 0)
+            ? ema
+            : bootstrap
+        let sessionBaseline = sessionRtEMA > 0 ? sessionRtEMA : bootstrap
+        let baseline = max(1.0, 0.5 * cardBaseline + 0.5 * sessionBaseline)
+        // Adaptive thresholds relative to baseline
+        let easyFactor = max(0.2, min(1.0, readDoubleDefault("easyFactor", fallback: 0.5)))
+        let goodFactor = max(0.6, min(3.0, readDoubleDefault("goodFactor", fallback: 1.25)))
+        let easyThreshold = max(1.0, baseline * easyFactor)
+        let goodThreshold = max(2.0, baseline * goodFactor)
+        if elapsed <= easyThreshold { return hintUsed ? .good : .easy }
+        if elapsed <= goodThreshold { return .good }
+        return .hard
+    }
+
+    // Update response-time statistics on the card (running totals and EMA)
+    private func updateResponseStats(for card: Card, elapsed: TimeInterval) {
+        let alpha = max(0.01, min(0.99, readDoubleDefault("rtAlpha", fallback: 0.2))) // EMA smoothing
+        card.lastResponseTime = elapsed
+        let total = (card.totalResponseTime ?? 0) + elapsed
+        card.totalResponseTime = total
+        let count = (card.responseCount ?? 0) + 1
+        card.responseCount = count
+        let prevEMA = card.responseTimeEMA ?? 0
+        card.responseTimeEMA = (count == 1) ? elapsed : (alpha * elapsed + (1 - alpha) * prevEMA)
+        // Session-level EMA
+        if sessionRtEMA == 0 {
+            sessionRtEMA = elapsed
+        } else {
+            sessionRtEMA = alpha * elapsed + (1 - alpha) * sessionRtEMA
+        }
+        card.updatedAt = Date()
+
+        // Update global user-level EMA if available
+        if let user = users.first {
+            let a = max(0.01, min(0.99, (user.rtAlpha ?? 0.2)))
+            if (user.rtGlobalEMA ?? 0) == 0 {
+                user.rtGlobalEMA = elapsed
+            } else {
+                let prev = user.rtGlobalEMA ?? elapsed
+                user.rtGlobalEMA = a * elapsed + (1 - a) * prev
+            }
+            user.updatedAt = Date()
+        }
+    }
+
+    // Timer management for timeout auto-incorrect
+    private func startAnswerTimer() {
+        stopAnswerTimer()
+        guard isFlipped else { return }
+        answerTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+            guard isFlipped, let started = answerStartAt else { return }
+            let elapsed = Date().timeIntervalSince(started)
+            if elapsed >= timeoutSeconds {
+                print("[StudyView] Timeout reached (\(timeoutSeconds)s). Auto-mark Incorrect.")
+                markAnswer(correct: false)
+            }
+        }
+        RunLoop.main.add(answerTimer!, forMode: .common)
+    }
+
+    private func stopAnswerTimer() {
+        answerTimer?.invalidate()
+        answerTimer = nil
+    }
+
+    // Read a Double from UserDefaults; if missing or zero, use fallback
+    private func readDoubleDefault(_ key: String, fallback: Double) -> Double {
+        if let val = UserDefaults.standard.object(forKey: key) as? Double, val != 0 {
+            return val
+        }
+        return fallback
     }
 
     private func forceDismiss(reason: String) {

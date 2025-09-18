@@ -59,6 +59,13 @@ struct DecksView: View {
                             .font(.headline)
                     }
                 }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        seedEnglishDeck()
+                    } label: {
+                        Label("Add English Deck", systemImage: "text.book.closed")
+                    }
+                }
             }
             .sheet(isPresented: $isShowingAddDeck) { AddDeckView() }
             .confirmationDialog(
@@ -87,6 +94,177 @@ struct DecksView: View {
             deckToDelete = nil
             isConfirmingDelete = false
         }
+    }
+
+    // MARK: - Seeding predefined English deck
+    private func seedEnglishDeck() {
+        let title = "English: Stronger Words and Basics"
+        if let existing = decks.first(where: { $0.title == title }) {
+            print("[DecksView] Deck already exists: \(existing.title). Skipping creation.")
+            return
+        }
+
+        let deck = Deck(title: title, deckDescription: "Alternatives to 'very' and other basic English items")
+
+        // Dataset: (question, answer, hint)
+        let pairs: [(String,String,String?)] = englishSeedData()
+
+        for (q, a, h) in pairs {
+            let card = Card(question: q, answer: a, hint: h)
+            deck.cards.append(card)
+            modelContext.insert(card)
+        }
+        modelContext.insert(deck)
+        print("[DecksView] Seeded deck '\(title)' with \(pairs.count) cards")
+    }
+
+    private func englishSeedData() -> [(String,String,String?)] {
+        var items: [(String,String,String?)] = []
+        func add(_ very: String, _ instead: String) {
+            items.append(("Say instead of ‘very \(very)’:", instead.capitalized, "very \(very)"))
+        }
+        // Stronger words than 'very ...'
+        add("angry", "furious")
+        add("happy", "ecstatic")
+        add("sad", "despondent")
+        add("cold", "freezing")
+        add("hot", "scorching")
+        add("tired", "exhausted")
+        add("hungry", "starving")
+        add("small", "tiny")
+        add("big", "enormous")
+        add("fast", "rapid")
+        add("slow", "sluggish")
+        add("smart", "brilliant")
+        add("stupid", "idiotic")
+        add("good", "excellent")
+        add("bad", "terrible")
+        add("beautiful", "gorgeous")
+        add("ugly", "hideous")
+        add("clean", "spotless")
+        add("dirty", "filthy")
+        add("bright", "luminous")
+        add("dark", "pitch-black")
+        add("easy", "effortless")
+        add("hard", "arduous")
+        add("strong", "powerful")
+        add("weak", "feeble")
+        add("noisy", "deafening")
+        add("quiet", "silent")
+        add("rich", "wealthy")
+        add("poor", "destitute")
+        add("scared", "terrified")
+        add("brave", "courageous")
+        add("old", "ancient")
+        add("young", "youthful")
+        add("new", "brand-new")
+        add("modern", "cutting-edge")
+        add("early", "premature")
+        add("late", "overdue")
+        add("short", "brief")
+        add("long", "lengthy")
+        add("tall", "towering")
+        add("thin", "slender")
+        add("fat", "obese")
+        add("interesting", "fascinating")
+        add("boring", "tedious")
+        add("funny", "hilarious")
+        add("serious", "solemn")
+        add("important", "crucial")
+        add("unimportant", "trivial")
+        add("necessary", "essential")
+        add("unnecessary", "needless")
+        add("simple", "straightforward")
+        add("complicated", "complex")
+        add("busy", "swamped")
+        add("calm", "serene")
+        add("rude", "obnoxious")
+        add("polite", "courteous")
+        add("kind", "compassionate")
+        add("mean", "malicious")
+        add("accurate", "precise")
+        add("sharp", "razor-sharp")
+        add("blunt", "dull")
+        add("wet", "soaked")
+        add("dry", "parched")
+        add("windy", "blustery")
+        add("rainy", "torrential")
+        add("cloudy", "overcast")
+        add("warm", "balmy")
+        add("cool", "chilly")
+        add("hot and humid", "sweltering")
+        add("cold and windy", "bitter")
+        add("sweet", "sugary")
+        add("sour", "tart")
+        add("salty", "briny")
+        add("spicy", "fiery")
+        add("bland", "tasteless")
+        add("flavorful", "savory")
+        add("expensive", "costly")
+        add("cheap", "inexpensive")
+        add("quick", "swift")
+        add("careful", "meticulous")
+        add("careless", "reckless")
+        add("crowded", "packed")
+        add("empty", "vacant")
+        add("open", "spacious")
+        add("closed", "sealed")
+        add("loose", "slack")
+        add("tight", "snug")
+
+        // Basic English phrases and irregulars
+        items.append(("Synonym of ‘start’:", "begin", nil))
+        items.append(("Synonym of ‘help’:", "assist", nil))
+        items.append(("Synonym of ‘make better’:", "improve", nil))
+        items.append(("Opposite of ‘increase’:", "decrease", nil))
+        items.append(("Opposite of ‘agree’:", "disagree", nil))
+        items.append(("Irregular past of ‘go’:", "went", nil))
+        items.append(("Irregular past of ‘see’:", "saw", nil))
+        items.append(("Irregular past of ‘take’:", "took", nil))
+        items.append(("Irregular past of ‘come’:", "came", nil))
+        items.append(("Irregular past of ‘find’:", "found", nil))
+        items.append(("Irregular past of ‘think’:", "thought", nil))
+        items.append(("Irregular past of ‘give’:", "gave", nil))
+        items.append(("Irregular past of ‘know’:", "knew", nil))
+        items.append(("Irregular past of ‘get’:", "got", nil))
+        items.append(("Irregular past of ‘eat’:", "ate", nil))
+        items.append(("Irregular past of ‘drink’:", "drank", nil))
+        items.append(("Irregular past of ‘write’:", "wrote", nil))
+        items.append(("Irregular past of ‘read’:", "read", "pronounced ‘red’"))
+        items.append(("Irregular past of ‘buy’:", "bought", nil))
+        items.append(("Irregular past of ‘teach’:", "taught", nil))
+
+        // Ensure ~100 cards by padding with collocations
+        let collocations = [
+            ("Make a decision", "decide", "Phrase → single word"),
+            ("Do research", "research", "Verb form"),
+            ("Give a hand", "help", "Idiom → verb"),
+            ("Take a rest", "rest", nil),
+            ("Keep in mind", "remember", nil),
+            ("Catch a cold", "become ill", nil),
+            ("Break the rules", "violate", nil),
+            ("Look after", "care for", "Phrasal → verb"),
+            ("Look forward to", "anticipate", nil),
+            ("Put off", "postpone", nil),
+            ("Set up", "establish", nil),
+            ("Turn down", "reject", nil),
+            ("Figure out", "discover", nil),
+            ("Point out", "highlight", nil),
+            ("Run out of", "exhaust", nil),
+            ("Carry on", "continue", nil),
+            ("Come across", "encounter", nil),
+            ("Cut down on", "reduce", nil),
+            ("Fill in", "complete", nil),
+            ("Find out", "learn", nil)
+        ]
+        items.append(contentsOf: collocations)
+
+        // Trim or pad to 100
+        if items.count > 100 { items = Array(items.prefix(100)) }
+        while items.count < 100 {
+            items.append(("Common antonym of ‘hot’:", "cold", nil))
+        }
+        return items
     }
 }
 

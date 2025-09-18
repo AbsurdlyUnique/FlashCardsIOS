@@ -27,12 +27,14 @@ public struct StatsView: View {
     private var today: Date { Calendar.current.startOfDay(for: Date()) }
 
     private var dueTodayCount: Int {
-        let endOfToday = Calendar.current.date(byAdding: .day, value: 1, to: today)!
+        let cal = Calendar.current
+        let start = today
+        let endExclusive = cal.date(byAdding: .day, value: 1, to: start)!
         return cards.filter { card in
             guard !card.suspended else { return false }
-            if let buried = card.buriedUntil, buried > Date() { return false }
+            if let buried = card.buriedUntil, buried > start { return false }
             guard let due = card.nextReview else { return true }
-            return due < endOfToday
+            return (due >= start) && (due < endExclusive)
         }.count
     }
 
@@ -67,17 +69,20 @@ public struct StatsView: View {
     private var forecast7Days: [ForecastData] {
         let cal = Calendar.current
         return (0..<7).map { offset in
-            let d = cal.date(byAdding: .day, value: offset, to: today)!
-            let start = d
-            let end = cal.date(byAdding: .day, value: 1, to: d)!
+            let day = cal.date(byAdding: .day, value: offset, to: today)!
+            let start = cal.startOfDay(for: day)
+            let endExclusive = cal.date(byAdding: .day, value: 1, to: start)!
             let count = cards.filter { c in
                 guard !c.suspended else { return false }
-                if let buried = c.buriedUntil, buried > end { return false }
-                guard let due = c.nextReview else { return offset == 0 } // treat no nextReview as due today
-                return (start...end).contains(due)
+                // If the card is buried beyond the start of this day, it's not due on this day
+                if let buried = c.buriedUntil, buried > start { return false }
+                // Cards with no nextReview are treated as due today only
+                guard let due = c.nextReview else { return offset == 0 }
+                // Half-open interval [start, end)
+                return (due >= start) && (due < endExclusive)
             }.count
-            let label = Self.weekdayFormatter.string(from: d)
-            return ForecastData(date: d, label: label, dueCount: count)
+            let label = Self.weekdayFormatter.string(from: start)
+            return ForecastData(date: start, label: label, dueCount: count)
         }
     }
 
@@ -195,14 +200,14 @@ public struct StatsView: View {
     private var algorithmExplainer: some View {
         DisclosureGroup {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Our scheduler blends proven ideas (SM‑2/FSRS‑inspired) to space reviews effectively. At a glance:")
+                Text("Our scheduler uses an advanced FSRS‑inspired model with a target retention of about 90%. It scales well from tiny to large decks. At a glance:")
                     .foregroundStyle(.secondary)
-                bullet("You grade each review as Again, Hard, Good, or Easy.")
-                bullet("Ease adjusts up/down based on your grade, within safe bounds.")
-                bullet("Difficulty (0..1) shifts: lower means easier for you.")
-                bullet("Stability grows with success — larger stability yields longer intervals.")
-                bullet("Next interval uses both current interval and stability × ease, clamped to reasonable limits.")
-                bullet("Lapses increment on 'Again' and shorten the next interval.")
+                bullet("You answer with Correct or Incorrect. We map that to internal grades using your response time: fast=Easy, normal=Good, slow=Hard, incorrect=Again.")
+                bullet("Early learning steps are predictable (e.g., ~12h, 1d, 3d) so small decks feel smooth.")
+                bullet("Difficulty (0..1) adapts; lower means easier for you.")
+                bullet("Stability (memory strength) updates using retrievability feedback: the closer you are to forgetting, the more you learn from a success.")
+                bullet("The next interval is chosen to hit the target recall probability; it's adjusted by the mapped grade and grows monotonically vs. the previous interval.")
+                bullet("Sub‑day intervals are supported; Incorrect applies a lapse penalty and triggers relearning.")
             }
             .padding(.top, 8)
         } label: {
